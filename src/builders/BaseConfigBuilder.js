@@ -39,7 +39,7 @@ export class BaseConfigBuilder {
         if (directResult && typeof directResult === 'object' && directResult.type) {
             // It's a parsed config (singboxConfig or yamlConfig)
             if (directResult.config) {
-                this.applyConfigOverrides(directResult.config);
+                this.applyConfigOverrides(directResult.config, directResult.type);
             }
             if (Array.isArray(directResult.proxies)) {
                 for (const proxy of directResult.proxies) {
@@ -61,7 +61,7 @@ export class BaseConfigBuilder {
                     const decodedResult = parseSubscriptionContent(decodedWhole);
                     if (decodedResult && typeof decodedResult === 'object' && decodedResult.type) {
                         if (decodedResult.config) {
-                            this.applyConfigOverrides(decodedResult.config);
+                            this.applyConfigOverrides(decodedResult.config, decodedResult.type);
                         }
                         if (Array.isArray(decodedResult.proxies)) {
                             for (const proxy of decodedResult.proxies) {
@@ -113,7 +113,7 @@ export class BaseConfigBuilder {
                             const result = parseSubscriptionContent(content);
                             if (result && typeof result === 'object' && (result.type === 'yamlConfig' || result.type === 'singboxConfig' || result.type === 'surgeConfig')) {
                                 if (result.config) {
-                                    this.applyConfigOverrides(result.config);
+                                    this.applyConfigOverrides(result.config, result.type);
                                 }
                                 if (Array.isArray(result.proxies)) {
                                     result.proxies.forEach(proxy => {
@@ -149,7 +149,7 @@ export class BaseConfigBuilder {
                 // Handle yamlConfig, singboxConfig, and surgeConfig types (they have the same structure)
                 if (result && typeof result === 'object' && (result.type === 'yamlConfig' || result.type === 'singboxConfig' || result.type === 'surgeConfig')) {
                     if (result.config) {
-                        this.applyConfigOverrides(result.config);
+                        this.applyConfigOverrides(result.config, result.type);
                     }
                     if (Array.isArray(result.proxies)) {
                         result.proxies.forEach(proxy => {
@@ -246,7 +246,7 @@ export class BaseConfigBuilder {
         return descriptors;
     }
 
-    applyConfigOverrides(overrides) {
+    applyConfigOverrides(overrides, sourceFormat) {
         if (!overrides || typeof overrides !== 'object') {
             return;
         }

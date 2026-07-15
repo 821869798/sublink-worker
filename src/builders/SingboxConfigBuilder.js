@@ -96,6 +96,18 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         return proxy.tag;
     }
 
+    applyConfigOverrides(overrides, sourceFormat) {
+        if (sourceFormat && sourceFormat !== 'singboxConfig') {
+            const proxyGroups = overrides?.['proxy-groups'];
+            if (Array.isArray(proxyGroups)) {
+                super.applyConfigOverrides({ 'proxy-groups': proxyGroups }, sourceFormat);
+            }
+            return;
+        }
+
+        super.applyConfigOverrides(overrides, sourceFormat);
+    }
+
     convertProxy(proxy) {
         // Create a shallow copy to avoid mutating the original
         const sanitized = { ...proxy };
