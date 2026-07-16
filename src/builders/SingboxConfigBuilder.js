@@ -8,6 +8,45 @@ import { normalizeGroupName } from './helpers/groupNameUtils.js';
 
 const RULE_SET_HTTP_CLIENT_TAG = 'rule-set-download';
 
+const OBFS_PLUGIN_NAMES = new Set(['obfs', 'simple-obfs', 'obfs-local']);
+const OBFS_OPTION_NAMES = {
+    mode: 'obfs',
+    host: 'obfs-host',
+    path: 'obfs-uri'
+};
+
+function serializePluginOptions(plugin, options) {
+    if (typeof options === 'string') return options;
+    if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
+
+    const isObfs = OBFS_PLUGIN_NAMES.has(plugin);
+    const serialized = Object.entries(options)
+        .filter(([, value]) => value !== undefined && value !== null && value !== false)
+        .map(([key, value]) => {
+            const optionName = isObfs ? (OBFS_OPTION_NAMES[key] || key) : key;
+            return value === true ? optionName : `${optionName}=${value}`;
+        });
+
+    return serialized.length > 0 ? serialized.join(';') : undefined;
+}
+
+function normalizeShadowsocksPlugin(proxy) {
+    const normalized = { ...proxy };
+    if (proxy?.type !== 'shadowsocks' || !proxy.plugin) return normalized;
+
+    const plugin = OBFS_PLUGIN_NAMES.has(proxy.plugin) ? 'obfs-local' : proxy.plugin;
+    const pluginOpts = serializePluginOptions(proxy.plugin, proxy.plugin_opts);
+    normalized.plugin = plugin;
+
+    if (pluginOpts === undefined) {
+        delete normalized.plugin_opts;
+    } else {
+        normalized.plugin_opts = pluginOpts;
+    }
+
+    return normalized;
+}
+
 export class SingboxConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.12', includeAutoSelect = true) {
         const resolvedBaseConfig = baseConfig ?? SING_BOX_CONFIG;
@@ -109,8 +148,8 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
     }
 
     convertProxy(proxy) {
-        // Create a shallow copy to avoid mutating the original
-        const sanitized = { ...proxy };
+        // Clash models plugin options as objects, while sing-box forwards SIP003 strings to plugin executables.
+        const sanitized = normalizeShadowsocksPlugin(proxy);
 
         // Strip Clash-only / mis-typed fields that conflict with sing-box semantics.
         // `udp` is Clash-only. Top-level `network` in sing-box is a TCP/UDP allowlist

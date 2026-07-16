@@ -107,4 +107,70 @@ proxy-groups:
 
         expect(config.log).toEqual({ level: 'debug' });
     });
+
+    it('converts Shadowsocks plugin options to sing-box SIP003 strings', async () => {
+        const input = `
+proxies:
+  - name: Obfs-Node
+    type: ss
+    server: obfs.example.com
+    port: 443
+    cipher: aes-128-gcm
+    password: test
+    plugin: obfs
+    plugin-opts:
+      mode: http
+      host: cdn.example.com
+  - name: V2Ray-Node
+    type: ss
+    server: v2ray.example.com
+    port: 443
+    cipher: chacha20-ietf-poly1305
+    password: test
+    plugin: v2ray-plugin
+    plugin-opts:
+      mode: websocket
+      tls: true
+      host: cdn.example.com
+      path: /ws
+`;
+        const builder = new SingboxConfigBuilder(input, 'minimal', [], null, 'zh-CN', 'test-agent');
+
+        const config = await builder.build();
+        const obfsProxy = config.outbounds.find(outbound => outbound.tag === 'Obfs-Node');
+        const v2rayProxy = config.outbounds.find(outbound => outbound.tag === 'V2Ray-Node');
+
+        expect(obfsProxy).toMatchObject({
+            plugin: 'obfs-local',
+            plugin_opts: 'obfs=http;obfs-host=cdn.example.com'
+        });
+        expect(v2rayProxy).toMatchObject({
+            plugin: 'v2ray-plugin',
+            plugin_opts: 'mode=websocket;tls;host=cdn.example.com;path=/ws'
+        });
+    });
+
+    it('preserves native sing-box SIP003 plugin strings', async () => {
+        const input = JSON.stringify({
+            outbounds: [
+                {
+                    type: 'shadowsocks',
+                    tag: 'Native-Plugin',
+                    server: 'proxy.example.com',
+                    server_port: 443,
+                    method: 'aes-128-gcm',
+                    password: 'test',
+                    plugin: 'obfs-local',
+                    plugin_opts: 'obfs=tls;obfs-host=cdn.example.com'
+                }
+            ]
+        });
+        const builder = new SingboxConfigBuilder(input, 'minimal', [], null, 'zh-CN', 'test-agent');
+
+        const config = await builder.build();
+        const proxy = config.outbounds.find(outbound => outbound.tag === 'Native-Plugin');
+
+        expect(proxy.plugin).toBe('obfs-local');
+        expect(proxy.plugin_opts).toBe('obfs=tls;obfs-host=cdn.example.com');
+    });
 });
