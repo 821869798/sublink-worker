@@ -33,7 +33,7 @@ proxy-groups:
       - DIRECT
 `;
 
-    it('keeps converted proxies and groups without leaking Clash fields', async () => {
+    it('keeps converted proxies without leaking unused Clash groups or fields', async () => {
         const builder = new SingboxConfigBuilder(
             clashConfig,
             'minimal',
@@ -62,10 +62,7 @@ proxy-groups:
         expect(proxy).not.toHaveProperty('port');
         expect(proxy).not.toHaveProperty('udp');
 
-        expect(customGroup).toMatchObject({
-            type: 'selector',
-            outbounds: ['Test-Node', 'DIRECT']
-        });
+        expect(customGroup).toBeUndefined();
 
         for (const field of [
             'port',

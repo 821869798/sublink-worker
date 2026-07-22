@@ -402,12 +402,20 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 .map(o => normalizeGroupName(o?.tag))
                 .filter(Boolean)
         );
-        const validRefs = new Set(['DIRECT', 'direct']);
-        proxyList.forEach(n => validRefs.add(n));
+        const directProxyRefs = new Set(['DIRECT', 'direct'].map(normalizeGroupName));
+        proxyList.forEach(n => directProxyRefs.add(normalizeGroupName(n)));
+        const validRefs = new Set(directProxyRefs);
         groupTags.forEach(n => validRefs.add(n));
+        userGroups.forEach(group => {
+            const name = normalizeGroupName(group?.name);
+            if (name) validRefs.add(name);
+        });
 
         userGroups.forEach(userGroup => {
             if (!userGroup?.name) return;
+
+            const isSelector = userGroup.type === 'select' || userGroup.type === 'selector';
+            const hasUserProviders = Array.isArray(userGroup.use) && userGroup.use.length > 0;
 
             // Find existing outbound by normalized tag/name
             const existingIndex = (this.config.outbounds || []).findIndex(o =>
@@ -429,11 +437,20 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
                 // Merge 'outbounds' field (equivalent to Clash 'proxies')
                 if (Array.isArray(userGroup.proxies) && userGroup.proxies.length > 0) {
-                    const validUserOutbounds = userGroup.proxies.filter(p => validRefs.has(p));
+                    const validUserOutbounds = userGroup.proxies.filter(p => directProxyRefs.has(normalizeGroupName(p)));
+                    const isDirectDefaultSelector = isSelector &&
+                        normalizeGroupName(userGroup.proxies[0]) === normalizeGroupName('DIRECT') &&
+                        !hasUserProviders;
                     existing.outbounds = [...new Set([
                         ...(existing.outbounds || []),
                         ...validUserOutbounds
                     ])];
+                    if (isDirectDefaultSelector) {
+                        existing.outbounds = [
+                            'DIRECT',
+                            ...existing.outbounds.filter(p => normalizeGroupName(p) !== normalizeGroupName('DIRECT'))
+                        ];
+                    }
                 }
 
                 // Preserve user's custom settings
@@ -450,7 +467,16 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
                 // Validate outbounds references
                 if (Array.isArray(userGroup.proxies)) {
-                    newOutbound.outbounds = userGroup.proxies.filter(p => validRefs.has(p));
+                    const validUserOutbounds = userGroup.proxies.filter(p => validRefs.has(normalizeGroupName(p)));
+                    const isDirectDefaultSelector = isSelector &&
+                        normalizeGroupName(validUserOutbounds[0]) === normalizeGroupName('DIRECT') &&
+                        !hasUserProviders;
+                    newOutbound.outbounds = isDirectDefaultSelector
+                        ? uniqueNames([
+                            ...validUserOutbounds,
+                            ...this.buildSelectorMembers(proxyList)
+                        ])
+                        : validUserOutbounds;
                 }
 
                 // Validate providers references
@@ -529,6 +555,67 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 if (outbound?.type !== 'selector' && outbound?.type !== 'urltest') return true;
                 return outbound.outbounds?.length > 0 || outbound.providers?.length > 0;
             });
+    }
+
+    pruneUnreferencedSelectorGroups() {
+        const outbounds = Array.isArray(this.config.outbounds) ? this.config.outbounds : [];
+        const groupsByTag = new Map(
+            outbounds
+                .filter(outbound => outbound?.type === 'selector' || outbound?.type === 'urltest')
+                .map(outbound => [normalizeGroupName(outbound.tag), outbound])
+                .filter(([tag]) => tag)
+        );
+        const rootRefs = new Set();
+        const referenceKeys = new Set(['outbound', 'detour', 'final', 'download_detour']);
+
+        // Imported groups should survive only when the generated config can actually reach them.
+        const collectRefs = value => {
+            if (Array.isArray(value)) {
+                value.forEach(collectRefs);
+                return;
+            }
+            if (!value || typeof value !== 'object') return;
+
+            Object.entries(value).forEach(([key, entry]) => {
+                if (referenceKeys.has(key) && typeof entry === 'string') {
+                    rootRefs.add(normalizeGroupName(entry));
+                }
+                collectRefs(entry);
+            });
+        };
+
+        const { outbounds: _outbounds, ...configWithoutOutbounds } = this.config;
+        collectRefs(configWithoutOutbounds);
+        this.getOutboundsList().forEach(outbound => {
+            rootRefs.add(normalizeGroupName(this.t(`outboundNames.${outbound}`)));
+        });
+        (this.customRules || []).forEach(rule => {
+            const name = normalizeGroupName(rule?.name);
+            if (name) rootRefs.add(name);
+        });
+
+        const reachableGroups = new Set();
+        const pendingRefs = [...rootRefs];
+        while (pendingRefs.length > 0) {
+            const tag = pendingRefs.pop();
+            if (!tag || reachableGroups.has(tag)) continue;
+
+            const group = groupsByTag.get(tag);
+            if (!group) continue;
+
+            reachableGroups.add(tag);
+            (group.outbounds || []).forEach(member => {
+                const memberTag = normalizeGroupName(member);
+                if (groupsByTag.has(memberTag) && !reachableGroups.has(memberTag)) {
+                    pendingRefs.push(memberTag);
+                }
+            });
+        }
+
+        this.config.outbounds = outbounds.filter(outbound =>
+            (outbound?.type !== 'selector' && outbound?.type !== 'urltest') ||
+            reachableGroups.has(normalizeGroupName(outbound.tag))
+        );
     }
 
     buildRouteTarget(rule) {
@@ -683,6 +770,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 default_mode: clashMode
             };
         }
+        this.pruneUnreferencedSelectorGroups();
         return this.config;
     }
 }

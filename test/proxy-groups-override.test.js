@@ -389,6 +389,66 @@ proxy-groups:
             expect(autoSelect).toBeDefined();
             expect(autoSelect.outbounds).toContain('HK-Node');
         });
+
+        it('SingboxConfigBuilder should keep selected groups and prune unrelated imported groups', async () => {
+            const input = `
+proxies:
+  - name: Node-A
+    type: ss
+    server: a.example.com
+    port: 443
+    cipher: aes-128-gcm
+    password: test
+  - name: Node-B
+    type: ss
+    server: b.example.com
+    port: 443
+    cipher: aes-128-gcm
+    password: test
+proxy-groups:
+  - name: 📺 哔哩哔哩
+    type: select
+    proxies:
+      - DIRECT
+  - name: Steam
+    type: select
+    proxies:
+      - DIRECT
+      - HK
+  - name: HK
+    type: select
+    proxies:
+      - Node-A
+  - name: 🔰 选择节点
+    type: select
+    proxies:
+      - Node-A
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🔰 选择节点
+      - DIRECT
+`;
+            const builder = new SingboxConfigBuilder(input, ['Bilibili'], [], null, 'zh-CN', 'test-agent');
+            const config = await builder.build();
+
+            const generatedBilibili = config.outbounds.find(group => group.tag === '📺 哔哩哔哩');
+            expect(generatedBilibili.outbounds[0]).toBe('DIRECT');
+            expect(generatedBilibili.outbounds).toContain('Node-A');
+            expect(generatedBilibili.outbounds).toContain('Node-B');
+
+            const importedSteam = config.outbounds.find(group => group.tag === 'Steam');
+            expect(importedSteam).toBeUndefined();
+
+            const regionalGroup = config.outbounds.find(group => group.tag === 'HK');
+            expect(regionalGroup).toBeUndefined();
+
+            const importedNodeSelect = config.outbounds.find(group => group.tag === '🔰 选择节点');
+            expect(importedNodeSelect).toBeUndefined();
+
+            const fallbackGroup = config.outbounds.find(group => group.tag === '🐟 漏网之鱼');
+            expect(fallbackGroup.outbounds).not.toContain('🔰 选择节点');
+        });
     });
 
     describe('DNS Config Merging', () => {
