@@ -42,7 +42,11 @@ export const SING_BOX_CONFIG = {
 			},
 			{
 				rule_set: "geolocation-!cn",
-				query_type: "CNAME",
+				query_type: [
+					"CNAME",
+					"HTTPS",
+					"SVCB"
+				],
 				server: "dns_proxy"
 			},
 			{
@@ -86,7 +90,8 @@ export const SING_BOX_CONFIG = {
 	experimental: {
 		cache_file: {
 			enabled: true,
-			store_fakeip: true
+			store_fakeip: true,
+			store_dns: true
 		}
 	}
 };

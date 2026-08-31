@@ -48,7 +48,7 @@ function normalizeShadowsocksPlugin(proxy) {
 }
 
 export class SingboxConfigBuilder extends BaseConfigBuilder {
-    constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.12', includeAutoSelect = true) {
+    constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.14', includeAutoSelect = true) {
         const resolvedBaseConfig = baseConfig ?? SING_BOX_CONFIG;
         super(inputString, resolvedBaseConfig, lang, userAgent, groupByCountry, includeAutoSelect);
 
@@ -634,6 +634,13 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
      */
     configureRuleSetDownload() {
         if (this.singboxVersion === '1.14') {
+            if (Array.isArray(this.config.route?.rule_set)) {
+                this.config.route.rule_set.forEach(ruleSet => {
+                    if (ruleSet) {
+                        delete ruleSet.download_detour;
+                    }
+                });
+            }
             if (this.config.route.default_http_client) {
                 return;
             }
@@ -769,6 +776,19 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 secret,
                 default_mode: clashMode
             };
+        }
+        if (this.config.experimental?.cache_file) {
+            if (this.singboxVersion === '1.14') {
+                if ('store_rdrc' in this.config.experimental.cache_file) {
+                    delete this.config.experimental.cache_file.store_rdrc;
+                    this.config.experimental.cache_file.store_dns = true;
+                }
+            } else {
+                if ('store_dns' in this.config.experimental.cache_file) {
+                    delete this.config.experimental.cache_file.store_dns;
+                    this.config.experimental.cache_file.store_rdrc = true;
+                }
+            }
         }
         this.pruneUnreferencedSelectorGroups();
         return this.config;

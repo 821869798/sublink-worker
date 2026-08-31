@@ -23,7 +23,7 @@ describe('sing-box rule-set download detour', () => {
         return builder.build();
     };
 
-    it('adds download_detour to every remote rule-set on the default 1.12 tier', async () => {
+    it('adds download_detour to every remote rule-set on the 1.12 tier', async () => {
         const result = await buildWithVersion('1.12');
         const ruleSets = result.route.rule_set;
         expect(ruleSets.length).toBeGreaterThan(0);
@@ -49,7 +49,7 @@ describe('sing-box rule-set download detour', () => {
         });
     });
 
-    it('uses a shared http_client instead of download_detour on the 1.14 tier', async () => {
+    it('uses a shared http_client instead of download_detour on the default 1.14 tier', async () => {
         const result = await buildWithVersion('1.14');
         result.route.rule_set.forEach(rs => {
             expect(rs).not.toHaveProperty('download_detour');
@@ -120,15 +120,14 @@ describe('sing-box version tier resolution', () => {
         });
     });
 
-    it('falls back to the safe 1.12 tier when no version is detectable', async () => {
+    it('falls back to the 1.14 tier when no version is detectable', async () => {
         const res = await fetchConfig();
         expect(res.status).toBe(200);
         const json = await res.json();
-        expect(json).not.toHaveProperty('http_clients');
+        expect(json.http_clients).toEqual([{ tag: 'rule-set-download', detour: 'DIRECT' }]);
+        expect(json.route.default_http_client).toBe('rule-set-download');
         json.route.rule_set.forEach(rs => {
-            if (rs.type === 'remote') {
-                expect(rs.download_detour).toBe('DIRECT');
-            }
+            expect(rs).not.toHaveProperty('download_detour');
         });
     });
 });

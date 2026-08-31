@@ -511,7 +511,7 @@ function resolveSingboxConfigVersion(requestedVersion, userAgent) {
         }
     }
 
-    return '1.12';
+    return '1.14';
 }
 
 function getRequestHeader(request, name) {
