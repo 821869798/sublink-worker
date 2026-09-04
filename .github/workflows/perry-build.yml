@@ -64,8 +64,32 @@ jobs:
           New-Item -ItemType Directory -Force dist/perry | Out-Null
           $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
           perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
+          perry compile scripts/perry/probes/hello.js --target windows --no-auto-optimize --output dist/perry/probe-hello.exe
+          perry compile scripts/perry/probes/hono-fetch.js --target windows --no-auto-optimize --output dist/perry/probe-hono-fetch.exe
+          perry compile scripts/perry/probes/hono-server.js --target windows --no-auto-optimize --output dist/perry/probe-hono-server.exe
           $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
           "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Run Perry compatibility probes
+        shell: pwsh
+        run: |
+          & 'dist/perry/probe-hello.exe'
+          if ($LASTEXITCODE -ne 0) { throw "Hello probe failed: $LASTEXITCODE" }
+
+          & 'dist/perry/probe-hono-fetch.exe'
+          if ($LASTEXITCODE -ne 0) { throw "Hono fetch probe failed: $LASTEXITCODE" }
+
+          $probe = Start-Process -FilePath 'dist/perry/probe-hono-server.exe' -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            if ($probe.HasExited) { throw "Hono server probe crashed: $($probe.ExitCode)" }
+            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8798/'
+            if ($response.Content.Trim() -ne 'PERRY_PROBE_SERVER_OK') {
+              throw "Unexpected Hono server response: $($response.Content)"
+            }
+          } finally {
+            if (-not $probe.HasExited) { Stop-Process -Id $probe.Id -Force }
+          }
 
       - name: Verify executable
         shell: pwsh
@@ -126,7 +150,7 @@ jobs:
         with:
           name: sublink-perry-windows-x64
           path: |
-            dist/perry/sublink-perry.exe
+            dist/perry/*.exe
             ${{ runner.temp }}/sublink-perry.*.log
           if-no-files-found: error
           compression-level: 9
