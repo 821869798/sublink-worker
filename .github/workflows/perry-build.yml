@@ -64,32 +64,8 @@ jobs:
           New-Item -ItemType Directory -Force dist/perry | Out-Null
           $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
           perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
-          perry compile scripts/perry/probes/hello.js --target windows --no-auto-optimize --output dist/perry/probe-hello.exe
-          perry compile scripts/perry/probes/hono-fetch.js --target windows --no-auto-optimize --output dist/perry/probe-hono-fetch.exe
-          perry compile scripts/perry/probes/hono-server.js --target windows --no-auto-optimize --output dist/perry/probe-hono-server.exe
           $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
           "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
-
-      - name: Run Perry compatibility probes
-        shell: pwsh
-        run: |
-          & 'dist/perry/probe-hello.exe'
-          if ($LASTEXITCODE -ne 0) { throw "Hello probe failed: $LASTEXITCODE" }
-
-          & 'dist/perry/probe-hono-fetch.exe'
-          if ($LASTEXITCODE -ne 0) { throw "Hono fetch probe failed: $LASTEXITCODE" }
-
-          $probe = Start-Process -FilePath 'dist/perry/probe-hono-server.exe' -PassThru
-          try {
-            Start-Sleep -Seconds 2
-            if ($probe.HasExited) { throw "Hono server probe crashed: $($probe.ExitCode)" }
-            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8798/'
-            if ($response.Content.Trim() -ne 'PERRY_PROBE_SERVER_OK') {
-              throw "Unexpected Hono server response: $($response.Content)"
-            }
-          } finally {
-            if (-not $probe.HasExited) { Stop-Process -Id $probe.Id -Force }
-          }
 
       - name: Verify executable
         shell: pwsh
@@ -154,3 +130,80 @@ jobs:
             ${{ runner.temp }}/sublink-perry.*.log
           if-no-files-found: error
           compression-level: 9
+
+  probe:
+    name: Probe ${{ matrix.name }}
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: hello
+            source: scripts/perry/probes/hello.js
+            mode: console
+            expected: PERRY_PROBE_HELLO_OK
+          - name: hono-fetch
+            source: scripts/perry/probes/hono-fetch.js
+            mode: console
+            expected: PERRY_PROBE_HONO_OK
+          - name: hono-server
+            source: scripts/perry/probes/hono-server.js
+            mode: server
+            expected: PERRY_PROBE_SERVER_OK
+    env:
+      PERRY_NO_TELEMETRY: '1'
+      PERRY_NO_UPDATE_CHECK: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Setup Perry and LLVM
+        shell: pwsh
+        run: |
+          npm install --global @perryts/perry@0.5.1220
+          'C:\Program Files\LLVM\bin' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          git clone --depth 1 --branch v0.5.1220 https://github.com/PerryTS/perry.git perry-source
+
+      - name: Compile probe
+        shell: pwsh
+        run: |
+          $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
+          perry compile '${{ matrix.source }}' --target windows --output probe.exe
+
+      - name: Run probe
+        shell: pwsh
+        run: |
+          if ('${{ matrix.mode }}' -eq 'console') {
+            $output = & '.\probe.exe'
+            if ($LASTEXITCODE -ne 0) { throw "Probe exited with $LASTEXITCODE" }
+            if ($output -notcontains '${{ matrix.expected }}') { throw "Unexpected output: $output" }
+            exit 0
+          }
+
+          $process = Start-Process -FilePath '.\probe.exe' -PassThru
+          try {
+            Start-Sleep -Seconds 2
+            if ($process.HasExited) { throw "Server probe crashed: $($process.ExitCode)" }
+            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8798/'
+            if ($response.Content.Trim() -ne '${{ matrix.expected }}') {
+              throw "Unexpected response: $($response.Content)"
+            }
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+      - name: Upload probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: perry-probe-${{ matrix.name }}
+          path: probe.exe
+          if-no-files-found: ignore
