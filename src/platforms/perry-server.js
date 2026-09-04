@@ -1,6 +1,6 @@
 import { createApp } from '../app/createApp.jsx';
 import { MemoryKVAdapter } from '../adapters/kv/memoryKv.js';
-import { startNodeHttpServer } from './nodeHttpServer.js';
+import { startPerryHttpServer } from './perryHttpServer.js';
 
 console.log('[perry] entry loaded');
 
@@ -11,5 +11,5 @@ const kv = new MemoryKVAdapter();
 console.log('[perry] creating app');
 const app = createApp({ kv, assetFetcher: null, logger });
 console.log('[perry] starting HTTP server');
-startNodeHttpServer(app, { port, logger });
+startPerryHttpServer(app, { port, logger });
 console.log('[perry] HTTP server started');
