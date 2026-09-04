@@ -62,15 +62,8 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/perry | Out-Null
-          npx esbuild src/platforms/perry-server.js `
-            --bundle `
-            --platform=node `
-            --target=node18 `
-            --format=esm `
-            --minify `
-            --outfile=dist/perry/sublink-perry.mjs
           $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
-          perry compile dist/perry/sublink-perry.mjs --target windows --output dist/perry/sublink-perry.exe
+          perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
           $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
           "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
