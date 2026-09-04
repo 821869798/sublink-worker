@@ -59,11 +59,22 @@ jobs:
           cargo --version
           perry doctor
 
+      - name: Cache Perry native runtime
+        uses: actions/cache@v4
+        with:
+          path: |
+            perry-source/target
+            node_modules/.cache/perry
+          key: perry-windows-${{ hashFiles('perry-source/Cargo.lock', 'package-lock.json', 'src/**') }}
+          restore-keys: perry-windows-
+
       - name: Compile native executable
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/perry | Out-Null
           perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
+          $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
+          "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
       - name: Verify executable
         shell: pwsh
@@ -94,7 +105,8 @@ jobs:
             }
 
             if (-not $ready) {
-              throw 'Perry executable did not become ready'
+              $exitState = if ($process.HasExited) { "exit code $($process.ExitCode)" } else { 'still running' }
+              throw "Perry executable did not become ready ($exitState)"
             }
 
             $singboxUrl = 'http://127.0.0.1:8797/singbox?config=ss%3A%2F%2FYWVzLTI1Ni1nY206dGVzdA%3D%3D%401.2.3.4%3A443%23test'
@@ -109,8 +121,6 @@ jobs:
               throw 'Short-link endpoint returned an empty code'
             }
 
-            $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
-            "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
           } finally {
             if (-not $process.HasExited) {
               Stop-Process -Id $process.Id -Force
@@ -119,10 +129,13 @@ jobs:
             if (Test-Path $stderr) { Get-Content $stderr }
           }
 
-      - name: Upload executable
+      - name: Upload executable and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: sublink-perry-windows-x64
-          path: dist/perry/sublink-perry.exe
+          path: |
+            dist/perry/sublink-perry.exe
+            ${{ runner.temp }}/sublink-perry.*.log
           if-no-files-found: error
           compression-level: 9
