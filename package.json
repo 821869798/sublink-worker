@@ -10,12 +10,14 @@
     "start": "wrangler dev",
     "test": "vitest run",
     "setup-kv": "node scripts/setup-kv.cjs",
-    "build:node": "node_modules/.bin/esbuild src/platforms/node-server.js --bundle --platform=node --target=node18 --format=cjs --outfile=dist/node-server.cjs",
+    "build:node": "esbuild src/platforms/node-server.js --bundle --platform=node --target=node18 --format=cjs --outfile=dist/node-server.cjs",
+    "build:standalone": "node scripts/build-standalone.mjs",
     "dev:node": "npm run build:node && node dist/node-server.cjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.8",
     "esbuild": "^0.28.1",
+    "postject": "^1.0.0-alpha.6",
     "vitest": "^4.1.7",
     "wrangler": "^4.51.0"
   },

@@ -42,9 +42,23 @@
 
 ### Alternative Runtimes
 - **Node.js**: `npm run build:node && node dist/node-server.cjs`
+- **Windows standalone**: `npm run build:standalone`, then distribute `dist/standalone/sublink.exe`
 - **Vercel**: `vercel deploy` (configure KV in project settings)
 - **Docker**: `docker pull ghcr.io/7sageer/sublink-worker:latest`
 - **Docker Compose**: `docker compose up -d` (includes Redis)
+
+### Windows Standalone Client
+
+Build on Windows with Node.js 20 or newer:
+
+```bash
+npm install
+npm run build:standalone
+```
+
+The generated `dist/standalone/sublink.exe` contains the Node.js runtime and static assets. It needs no Node.js installation or companion files on the target machine. Double-clicking it starts the local service and opens `http://127.0.0.1:8787` in the default browser; closing its terminal stops the service.
+
+Use `PORT` to change the port, or set `SUBLINK_NO_OPEN_BROWSER=true` to suppress browser launch. Without Redis configuration, short links and saved configurations use in-memory storage and are cleared on restart. The raw executable is typically 70–100 MB because it contains Node.js; maximum-compression 7z distribution is usually about 20–40 MB. For the smallest artifact, distribute `dist/node-server.cjs` (about 1 MB), but the target machine must have Node.js 18 or newer.
 
 ## ✨ Features
 
