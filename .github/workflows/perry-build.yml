@@ -5,9 +5,8 @@ on:
   push:
     paths:
       - '.github/workflows/perry-build.yml'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'src/**'
+      - 'scripts/perry/**'
+      - 'src/platforms/perry-server.js'
 
 permissions:
   contents: read

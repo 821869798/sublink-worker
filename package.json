@@ -16,13 +16,13 @@
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.8",
+    "@perryts/hono-server": "^0.1.0",
     "esbuild": "^0.28.1",
     "postject": "^1.0.0-alpha.6",
     "vitest": "^4.1.7",
     "wrangler": "^4.51.0"
   },
   "dependencies": {
-    "@perryts/hono-server": "^0.1.0",
     "esbuild-register": "^3.6.0",
     "hono": "^4.10.7",
     "ioredis": "^5.8.2",
