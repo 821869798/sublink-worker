@@ -1,0 +1,121 @@
+name: Perry Windows Build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/perry-build.yml'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      PERRY_NO_TELEMETRY: '1'
+      PERRY_NO_UPDATE_CHECK: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Perry and LLVM
+        shell: pwsh
+        run: |
+          npm install --global @perryts/perry@0.5.1220
+          $llvmBin = 'C:\Program Files\LLVM\bin'
+          if (Test-Path "$llvmBin\clang.exe") {
+            $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          } elseif (-not (Get-Command clang.exe -ErrorAction SilentlyContinue)) {
+            choco install llvm --yes --no-progress
+            $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          perry --version
+          clang --version
+          perry doctor
+
+      - name: Compile native executable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/perry | Out-Null
+          perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $env:PORT = '8797'
+          $env:SUBLINK_NO_OPEN_BROWSER = 'true'
+          $stdout = Join-Path $env:RUNNER_TEMP 'sublink-perry.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'sublink-perry.stderr.log'
+          $process = Start-Process `
+            -FilePath 'dist/perry/sublink-perry.exe' `
+            -PassThru `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr
+
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 1
+              try {
+                $home = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8797/'
+                if ($home.StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                if ($process.HasExited) { break }
+              }
+            }
+
+            if (-not $ready) {
+              throw 'Perry executable did not become ready'
+            }
+
+            $singboxUrl = 'http://127.0.0.1:8797/singbox?config=ss%3A%2F%2FYWVzLTI1Ni1nY206dGVzdA%3D%3D%401.2.3.4%3A443%23test'
+            $singbox = Invoke-WebRequest -UseBasicParsing $singboxUrl
+            if ($singbox.StatusCode -ne 200) {
+              throw "Sing-box endpoint returned $($singbox.StatusCode)"
+            }
+
+            $shortenUrl = 'http://127.0.0.1:8797/shorten-v2?url=http%3A%2F%2Fx.com%2Fsingbox%3Fconfig%3Dss%3A%2F%2Ftest'
+            $shortCode = (Invoke-WebRequest -UseBasicParsing $shortenUrl).Content.Trim()
+            if (-not $shortCode) {
+              throw 'Short-link endpoint returned an empty code'
+            }
+
+            $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
+            "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
+          } finally {
+            if (-not $process.HasExited) {
+              Stop-Process -Id $process.Id -Force
+            }
+            if (Test-Path $stdout) { Get-Content $stdout }
+            if (Test-Path $stderr) { Get-Content $stderr }
+          }
+
+      - name: Upload executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: sublink-perry-windows-x64
+          path: dist/perry/sublink-perry.exe
+          if-no-files-found: error
+          compression-level: 9

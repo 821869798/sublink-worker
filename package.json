@@ -29,5 +29,17 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "perry": {
+    "compilePackages": [
+      "hono",
+      "js-yaml"
+    ],
+    "allow": {
+      "compilePackages": [
+        "hono",
+        "js-yaml"
+      ]
+    }
   }
 }
