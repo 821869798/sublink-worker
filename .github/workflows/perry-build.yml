@@ -65,7 +65,7 @@ jobs:
             --format=esm `
             --minify `
             --outfile=dist/perry/sublink-perry.mjs
-          perry compile dist/perry/sublink-perry.mjs --target windows --no-auto-optimize --output dist/perry/sublink-perry.exe
+          perry compile dist/perry/sublink-perry.mjs --no-auto-optimize --output dist/perry/sublink-perry.exe
           $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
           "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
