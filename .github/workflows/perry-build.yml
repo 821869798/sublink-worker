@@ -19,6 +19,7 @@ jobs:
     env:
       PERRY_NO_TELEMETRY: '1'
       PERRY_NO_UPDATE_CHECK: '1'
+      PERRY_WORKSPACE_ROOT: '${{ github.workspace }}\perry-source'
 
     steps:
       - name: Checkout
@@ -45,11 +46,17 @@ jobs:
             $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
 
+      - name: Checkout matching Perry source
+        shell: pwsh
+        run: git clone --depth 1 --branch v0.5.1220 https://github.com/PerryTS/perry.git perry-source
+
       - name: Show toolchain
         shell: pwsh
         run: |
           perry --version
           clang --version
+          rustc --version
+          cargo --version
           perry doctor
 
       - name: Compile native executable
