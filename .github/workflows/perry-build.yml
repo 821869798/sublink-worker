@@ -62,7 +62,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force dist/perry | Out-Null
           $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
-          perry compile src/platforms/perry-server.js --target windows --output dist/perry/sublink-perry.exe
+          perry compile src/platforms/perry-server.js --output dist/perry/sublink-perry.exe
           $size = (Get-Item 'dist/perry/sublink-perry.exe').Length
           "Perry executable size: $size bytes" | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY -Append
 
@@ -175,7 +175,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PERRY_WORKSPACE_ROOT = Join-Path $env:GITHUB_WORKSPACE 'perry-source'
-          perry compile '${{ matrix.source }}' --target windows --output probe.exe
+          perry compile '${{ matrix.source }}' --output probe.exe
 
       - name: Run probe
         shell: pwsh
@@ -190,10 +190,16 @@ jobs:
           $process = Start-Process -FilePath '.\probe.exe' -PassThru
           try {
             Start-Sleep -Seconds 2
-            if ($process.HasExited) { throw "Server probe crashed: $($process.ExitCode)" }
-            $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8798/'
-            if ($response.Content.Trim() -ne '${{ matrix.expected }}') {
-              throw "Unexpected response: $($response.Content)"
+            if ($process.HasExited) { throw "Server probe crashed at startup: exit $($process.ExitCode)" }
+            try {
+              $response = Invoke-WebRequest -UseBasicParsing 'http://127.0.0.1:8798/'
+              if ($response.Content.Trim() -ne '${{ matrix.expected }}') {
+                throw "Unexpected response: $($response.Content)"
+              }
+            } catch {
+              $alive = -not $process.HasExited
+              $exit = if ($process.HasExited) { $process.ExitCode } else { 'n/a' }
+              throw "Request failed: $($_.Exception.Message); process alive=$alive exit=$exit"
             }
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
