@@ -67,6 +67,7 @@ jobs:
             node_modules/.cache/perry
           key: perry-windows-${{ hashFiles('perry-source/Cargo.lock', 'package-lock.json', 'src/**') }}
           restore-keys: perry-windows-
+          save-always: true
 
       - name: Compile native executable
         shell: pwsh
