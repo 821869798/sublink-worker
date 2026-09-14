@@ -645,7 +645,8 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
                 return;
             }
             if (!Array.isArray(this.config.http_clients) || this.config.http_clients.length === 0) {
-                this.config.http_clients = [{ tag: RULE_SET_HTTP_CLIENT_TAG, detour: 'DIRECT' }];
+                // Do not specify detour: 'DIRECT' as detour to an empty direct outbound causes fatal validation error in sing-box 1.14+
+                this.config.http_clients = [{ tag: RULE_SET_HTTP_CLIENT_TAG }];
             }
             this.config.route.default_http_client = this.config.http_clients[0].tag;
             return;
@@ -751,7 +752,7 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
         // 如果启用 Clash UI 或传入了自定义参数，添加/覆盖 Clash API 配置
         if (this.enableClashUI || this.externalController || this.externalUiDownloadUrl) {
             const defaultExternalController = "0.0.0.0:9090";
-            const defaultExternalUiDownloadUrl = "https://gh-proxy.com/https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip";
+            const defaultExternalUiDownloadUrl = "https://github.com/Zephyruso/zashboard/archive/refs/heads/gh-pages.zip";
             const defaultExternalUi = "./ui";
             const defaultSecret = "";
             const defaultDownloadDetour = "DIRECT";

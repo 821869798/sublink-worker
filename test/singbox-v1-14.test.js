@@ -20,7 +20,7 @@ describe('Sing-box 1.14 configuration', () => {
 
         // Route and HTTP client
         expect(config.route.default_http_client).toBe('rule-set-download');
-        expect(config.http_clients).toEqual([{ tag: 'rule-set-download', detour: 'DIRECT' }]);
+        expect(config.http_clients).toEqual([{ tag: 'rule-set-download' }]);
 
         // Route default domain resolver
         expect(config.route.default_domain_resolver).toBe('dns_resolver');
