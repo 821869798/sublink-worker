@@ -47,6 +47,147 @@ function normalizeShadowsocksPlugin(proxy) {
     return normalized;
 }
 
+function parseBandwidthMbps(val) {
+    if (typeof val === 'number') return Number.isFinite(val) ? val : undefined;
+    if (typeof val === 'string') {
+        const match = val.trim().match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]*)$/);
+        if (match) {
+            const num = parseFloat(match[1]);
+            const unit = match[2].toLowerCase();
+            if (unit === 'g' || unit === 'gbps') {
+                return Math.round(num * 1000);
+            }
+            return Math.round(num);
+        }
+    }
+    return undefined;
+}
+
+function normalizeHopInterval(val) {
+    if (val === undefined || val === null || val === '') return undefined;
+    if (typeof val === 'number') {
+        return val > 0 ? `${val}s` : undefined;
+    }
+    if (typeof val === 'string') {
+        const trimmed = val.trim();
+        if (/^\d+$/.test(trimmed)) {
+            const num = parseInt(trimmed, 10);
+            return num > 0 ? `${num}s` : undefined;
+        }
+        return trimmed || undefined;
+    }
+    return undefined;
+}
+
+function normalizeHysteria2(proxy) {
+    if (proxy?.type !== 'hysteria2') return proxy;
+
+    const normalized = { ...proxy };
+
+    // Strip fields not recognized in sing-box hysteria2 outbound
+    delete normalized.auth;
+    delete normalized.fast_open;
+    delete normalized.recv_window_conn;
+
+    // Handle port hopping: sing-box uses `server_ports: ["from-to"]` and conflicts with `server_port`
+    const rawPorts = normalized.server_ports || normalized.ports;
+    delete normalized.ports;
+
+    if (rawPorts) {
+        let portList = [];
+        if (Array.isArray(rawPorts)) {
+            portList = rawPorts;
+        } else if (typeof rawPorts === 'number') {
+            portList = [String(rawPorts)];
+        } else if (typeof rawPorts === 'string') {
+            portList = rawPorts.split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        // sing-box Hysteria2 server_ports requires colon ':' separator, e.g. "2080:3000"
+        const formattedPorts = portList
+            .map(p => {
+                const trimmed = String(p).trim().replace('-', ':');
+                if (/^\d+$/.test(trimmed)) {
+                    // Single port entry inside server_ports list must be "port:port"
+                    return `${trimmed}:${trimmed}`;
+                }
+                return trimmed;
+            })
+            .filter(Boolean);
+
+        // If single port number without range or list, keep as server_port instead of server_ports
+        const isSinglePortNumber = formattedPorts.length === 1 &&
+            formattedPorts[0].split(':')[0] === formattedPorts[0].split(':')[1] &&
+            (!Array.isArray(rawPorts) || rawPorts.length === 1) &&
+            !String(rawPorts).includes('-') &&
+            !String(rawPorts).includes(':');
+
+        if (isSinglePortNumber) {
+            normalized.server_port = parseInt(formattedPorts[0].split(':')[0], 10);
+            delete normalized.server_ports;
+        } else if (formattedPorts.length > 0) {
+            normalized.server_ports = formattedPorts;
+            delete normalized.server_port;
+        } else {
+            delete normalized.server_ports;
+        }
+    } else if (normalized.server_ports) {
+        // If server_ports already existed without `ports`, ensure colon format and delete server_port
+        if (Array.isArray(normalized.server_ports) && normalized.server_ports.length > 0) {
+            normalized.server_ports = normalized.server_ports.map(p => {
+                const trimmed = String(p).trim().replace('-', ':');
+                return /^\d+$/.test(trimmed) ? `${trimmed}:${trimmed}` : trimmed;
+            });
+            delete normalized.server_port;
+        }
+    }
+
+    // Format hop_interval (Duration string in sing-box, e.g. "30s")
+    const hopInterval = normalizeHopInterval(normalized.hop_interval);
+    if (hopInterval) {
+        normalized.hop_interval = hopInterval;
+    } else {
+        delete normalized.hop_interval;
+    }
+
+    // Format bandwidth: sing-box uses up_mbps and down_mbps (numeric)
+    if (normalized.up !== undefined) {
+        const upMbps = parseBandwidthMbps(normalized.up);
+        if (upMbps !== undefined) {
+            normalized.up_mbps = upMbps;
+        }
+        delete normalized.up;
+    }
+    if (normalized.down !== undefined) {
+        const downMbps = parseBandwidthMbps(normalized.down);
+        if (downMbps !== undefined) {
+            normalized.down_mbps = downMbps;
+        }
+        delete normalized.down;
+    }
+
+    return normalized;
+}
+
+function normalizeTuic(proxy) {
+    if (proxy?.type !== 'tuic') return proxy;
+
+    const normalized = { ...proxy };
+    delete normalized.fast_open;
+    delete normalized.reduce_rtt;
+    delete normalized.disable_sni;
+    delete normalized.flow;
+
+    if (normalized.zero_rtt !== undefined) {
+        if (normalized.zero_rtt_handshake === undefined) {
+            normalized.zero_rtt_handshake = !!normalized.zero_rtt;
+        }
+        delete normalized.zero_rtt;
+    }
+
+    return normalized;
+}
+
 export class SingboxConfigBuilder extends BaseConfigBuilder {
     constructor(inputString, selectedRules, customRules, baseConfig, lang, userAgent, groupByCountry = false, enableClashUI = false, externalController, externalUiDownloadUrl, singboxVersion = '1.14', includeAutoSelect = true) {
         const resolvedBaseConfig = baseConfig ?? SING_BOX_CONFIG;
@@ -149,7 +290,9 @@ export class SingboxConfigBuilder extends BaseConfigBuilder {
 
     convertProxy(proxy) {
         // Clash models plugin options as objects, while sing-box forwards SIP003 strings to plugin executables.
-        const sanitized = normalizeShadowsocksPlugin(proxy);
+        let sanitized = normalizeShadowsocksPlugin(proxy);
+        sanitized = normalizeHysteria2(sanitized);
+        sanitized = normalizeTuic(sanitized);
 
         // Strip Clash-only / mis-typed fields that conflict with sing-box semantics.
         // `udp` is Clash-only. Top-level `network` in sing-box is a TCP/UDP allowlist

@@ -216,19 +216,24 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     ...(proxy.packet_encoding ? { 'packet-encoding': proxy.packet_encoding } : {}),
                     'flow': proxy.flow ?? undefined,
                 };
-            case 'hysteria2':
+            case 'hysteria2': {
+                const ports = proxy.ports || (Array.isArray(proxy.server_ports) ? proxy.server_ports.join(',') : proxy.server_ports);
+                const parsedFirstPort = Array.isArray(proxy.server_ports) && proxy.server_ports[0]
+                    ? parseInt(String(proxy.server_ports[0]).split('-')[0].split(':')[0], 10)
+                    : undefined;
+                const port = proxy.server_port ?? (Number.isFinite(parsedFirstPort) ? parsedFirstPort : undefined);
                 return {
                     name: proxy.tag,
                     type: proxy.type,
                     server: proxy.server,
-                    port: proxy.server_port,
-                    ...(proxy.ports ? { ports: proxy.ports } : {}),
+                    port,
+                    ...(ports ? { ports } : {}),
                     obfs: proxy.obfs?.type,
                     'obfs-password': proxy.obfs?.password,
                     password: proxy.password,
                     auth: proxy.auth,
-                    up: proxy.up,
-                    down: proxy.down,
+                    up: proxy.up ?? (proxy.up_mbps !== undefined ? `${proxy.up_mbps} Mbps` : undefined),
+                    down: proxy.down ?? (proxy.down_mbps !== undefined ? `${proxy.down_mbps} Mbps` : undefined),
                     'recv-window-conn': proxy.recv_window_conn,
                     sni: proxy.tls?.server_name || '',
                     'skip-cert-verify': !!proxy.tls?.insecure,
@@ -236,6 +241,7 @@ export class ClashConfigBuilder extends BaseConfigBuilder {
                     ...(proxy.alpn ? { alpn: proxy.alpn } : {}),
                     ...(proxy.fast_open !== undefined ? { 'fast-open': proxy.fast_open } : {}),
                 };
+            }
             case 'trojan':
                 return {
                     name: proxy.tag,
